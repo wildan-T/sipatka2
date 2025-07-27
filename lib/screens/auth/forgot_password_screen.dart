@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sipatka/providers/auth_provider.dart';
+import 'package:sipatka/screens/auth/verify_otp_screen.dart';
 import 'package:sipatka/utils/app_theme.dart';
 import 'package:sipatka/utils/error_dialog.dart'; // Import dialog error kita
 
@@ -24,25 +25,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
     setState(() => _isLoading = true);
 
+    final email = _emailController.text.trim();
     final authProvider = context.read<AuthProvider>();
-    await authProvider.resetPassword(email: _emailController.text.trim());
+    await authProvider.resetPassword(email: email);
 
     if (!mounted) return;
 
-    // Periksa apakah ada pesan error dari provider
     if (authProvider.errorMessage == null) {
-      // Jika sukses, tampilkan pesan positif dan kembali ke halaman login
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Email reset password telah dikirim. Silakan cek inbox Anda.',
-          ),
-          backgroundColor: Colors.green,
-        ),
+      // Jika sukses kirim email, arahkan ke halaman verifikasi OTP
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => VerifyOtpScreen(email: email)),
       );
-      Navigator.pop(context);
     } else {
-      // Jika gagal, tampilkan dialog error
       showErrorDialog(
         context: context,
         title: 'Gagal Mengirim Email',
