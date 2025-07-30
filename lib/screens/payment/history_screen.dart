@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:sipatka/models/payment_model.dart';
+import 'package:sipatka/providers/notification_provider.dart';
 import '../../providers/payment_provider.dart';
 import '../../utils/app_theme.dart';
 
@@ -19,7 +20,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
   PaymentStatus? _selectedStatus;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifProvider = Provider.of<NotificationProvider>(context);
+
+    if (notifProvider.hasPaymentStatusUpdate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
+        notifProvider.clearPaymentStatusUpdateNotification();
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final notifProvider = Provider.of<NotificationProvider>(context);
+
+    if (notifProvider.hasPaymentStatusUpdate) {
+      Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
+      notifProvider.clearPaymentStatusUpdateNotification();
+    }
+
     return Scaffold(
       body: Consumer<PaymentProvider>(
         builder: (context, payment, _) {

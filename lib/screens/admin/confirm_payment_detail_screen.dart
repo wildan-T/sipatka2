@@ -53,8 +53,8 @@ class _ConfirmPaymentDetailScreenState
         showErrorDialog(
           context: context,
           title: 'Konfirmasi Gagal',
-          message:
-              'Terjadi kesalahan saat mencoba mengonfirmasi pembayaran.\n\nDetail: $e',
+          message: 'Terjadi kesalahan saat mencoba mengonfirmasi pembayaran.',
+          errorDetail: e.toString(),
         );
       }
     }
@@ -78,8 +78,8 @@ class _ConfirmPaymentDetailScreenState
         showErrorDialog(
           context: context,
           title: 'Penolakan Gagal',
-          message:
-              'Terjadi kesalahan saat mencoba menolak pembayaran.\n\nDetail: $e',
+          message: 'Terjadi kesalahan saat mencoba menolak pembayaran.',
+          errorDetail: e.toString(),
         );
       }
     }

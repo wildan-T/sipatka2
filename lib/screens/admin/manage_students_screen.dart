@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sipatka/models/user_model.dart';
 import 'package:sipatka/providers/admin_provider.dart';
+import 'package:sipatka/providers/notification_provider.dart';
 import 'package:sipatka/screens/admin/admin_chat_detail_screen.dart';
 import 'package:sipatka/screens/admin/student_detail_screen.dart';
 
@@ -103,6 +104,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
     final studentName = studentData['student_name'] ?? 'Tanpa Nama';
     final parentName = studentData['parent_name'] ?? 'Tanpa Wali';
     final className = studentData['class_name'] ?? 'Tanpa Kelas';
+    final parentId = studentData['parent_id'];
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -144,27 +146,39 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text('Wali: $parentName | Kelas: $className'),
-        trailing: IconButton(
-          tooltip: "Chat dengan $parentName",
-          icon: const Icon(Icons.chat_bubble_outline),
-          color: Theme.of(context).primaryColor,
-          onPressed: () {
-            // --- KUNCI PERBAIKAN: Membuat UserModel on-the-fly dengan ID yang BENAR ---
-            final parentForChat = UserModel(
-              uid: studentData['parent_id'], // Gunakan parent_id untuk chat
-              parentName: parentName,
-              // Isi field lain dengan data yang relevan atau nilai default
-              studentName: studentName,
-              className: className,
-              email: '', // Email tidak dibutuhkan untuk navigasi chat
-              role: 'user',
-              saldo: 0.0,
-            );
+        trailing: Consumer<NotificationProvider>(
+          // Gunakan Consumer di sini
+          builder: (context, notification, _) {
+            return Badge(
+              // Widget Badge untuk menampilkan titik notifikasi
+              isLabelVisible: notification.hasUnreadMessagesFrom(parentId),
+              child: IconButton(
+                tooltip: "Chat dengan $parentName",
+                icon: const Icon(Icons.chat_bubble_outline),
+                color: Theme.of(context).primaryColor,
+                onPressed: () {
+                  // Hapus notifikasi saat admin membuka chat
+                  notification.clearMessageNotificationFor(parentId);
 
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AdminChatDetailScreen(parent: parentForChat),
+                  final parentForChat = UserModel(
+                    uid: parentId,
+                    parentName: parentName,
+                    // Isi field lain dengan data yang relevan atau nilai default
+                    studentName: studentName,
+                    className: className,
+                    email: '', // Email tidak dibutuhkan untuk navigasi chat
+                    role: 'user',
+                    saldo: 0.0,
+                  );
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => AdminChatDetailScreen(parent: parentForChat),
+                    ),
+                  );
+                },
               ),
             );
           },

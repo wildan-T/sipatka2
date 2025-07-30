@@ -366,7 +366,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                           context: context,
                           title: 'Update Gagal',
                           message:
-                              'Tidak dapat menyimpan perubahan. Silakan coba lagi nanti.\n\nDetail: $e',
+                              'Tidak dapat menyimpan perubahan. Silakan coba lagi nanti.',
+                          errorDetail: e.toString(),
                         );
                       }
                     }
@@ -424,7 +425,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                         context: context,
                         title: 'Hapus Akun Gagal',
                         message:
-                            'Tidak dapat menghapus akun saat ini. Pastikan koneksi internet stabil.\n\nDetail: $e',
+                            'Tidak dapat menghapus akun saat ini. Pastikan koneksi internet stabil.',
+                        errorDetail: e.toString(),
                       );
                     }
                   }

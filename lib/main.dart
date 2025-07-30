@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sipatka/providers/notification_provider.dart';
 import 'package:sipatka/screens/profile/change_password_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sipatka/providers/admin_provider.dart';
@@ -41,6 +42,25 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
         ChangeNotifierProvider(create: (_) => AdminProvider()),
+        ChangeNotifierProxyProvider<AuthProvider, NotificationProvider>(
+          create:
+              (context) => NotificationProvider(context.read<AuthProvider>()),
+          update: (context, auth, previous) => NotificationProvider(auth),
+        ),
+        // ChangeNotifierProxyProvider2<
+        //   AuthProvider,
+        //   PaymentProvider,
+        //   NotificationProvider
+        // >(
+        //   create:
+        //       (context) => NotificationProvider(
+        //         context.read<AuthProvider>(),
+        //         context.read<PaymentProvider>(),
+        //       ),
+        //   update:
+        //       (context, auth, payment, previous) =>
+        //           NotificationProvider(auth, payment),
+        // ),
       ],
       child: MaterialApp(
         title: 'SIPATKA',

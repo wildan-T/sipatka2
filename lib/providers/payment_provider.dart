@@ -142,15 +142,15 @@ class PaymentProvider with ChangeNotifier {
       // 2. Jika data siswa tidak ditemukan, jangan lakukan apa-apa.
       //    Pastikan daftar pembayaran kosong.
       if (studentResponse == null || studentResponse.isEmpty) {
-        print(
-          "Sipatka Log: Tidak ada data siswa ditemukan untuk wali dengan ID: ${user.id}",
-        );
+        // print(
+        //   "Sipatka Log: Tidak ada data siswa ditemukan untuk wali dengan ID: ${user.id}",
+        // );
         _payments = [];
       } else {
         final studentId = studentResponse['id'];
-        print(
-          "Sipatka Log: Ditemukan siswa dengan ID: $studentId. Mengambil tagihan...",
-        );
+        // print(
+        //   "Sipatka Log: Ditemukan siswa dengan ID: $studentId. Mengambil tagihan...",
+        // );
 
         // 3. Gunakan studentId untuk mengambil data dari tabel payments.
         //    Ini adalah filter yang hilang sebelumnya.
@@ -162,12 +162,12 @@ class PaymentProvider with ChangeNotifier {
             .order('month', ascending: true); // Lalu urutkan berdasarkan bulan
 
         _payments = data.map((item) => Payment.fromSupabase(item)).toList();
-        print("Sipatka Log: Berhasil mengambil ${_payments.length} tagihan.");
+        // print("Sipatka Log: Berhasil mengambil ${_payments.length} tagihan.");
       }
 
       // --- AKHIR KODE BARU ---
     } catch (e) {
-      print("Sipatka Log: Terjadi error saat fetchPayments: $e");
+      // print("Sipatka Log: Terjadi error saat fetchPayments: $e");
       _payments = [];
     }
 
