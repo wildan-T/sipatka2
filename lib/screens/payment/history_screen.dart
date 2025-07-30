@@ -16,7 +16,7 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  // State untuk melacak filter yang aktif
+  bool _initialized = false;
   PaymentStatus? _selectedStatus;
 
   @override
@@ -24,8 +24,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
     super.didChangeDependencies();
     final notifProvider = Provider.of<NotificationProvider>(context);
 
+    if (!_initialized) {
+      Future.microtask(() {
+        Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
+      });
+      _initialized = true;
+    }
+
     if (notifProvider.hasPaymentStatusUpdate) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.microtask(() {
         Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
         notifProvider.clearPaymentStatusUpdateNotification();
       });
@@ -34,13 +41,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final notifProvider = Provider.of<NotificationProvider>(context);
-
-    if (notifProvider.hasPaymentStatusUpdate) {
-      Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
-      notifProvider.clearPaymentStatusUpdateNotification();
-    }
-
     return Scaffold(
       body: Consumer<PaymentProvider>(
         builder: (context, payment, _) {
@@ -48,7 +48,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // Filter daftar pembayaran berdasarkan status yang dipilih
           final filteredPayments =
               _selectedStatus == null
                   ? payment.payments
@@ -59,7 +58,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- HEADER DAN FILTER ---
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -77,7 +75,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
               ),
-              // --- DAFTAR RIWAYAT ---
               Expanded(
                 child:
                     filteredPayments.isEmpty
@@ -99,7 +96,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  // Widget untuk membuat chip filter
   Widget _buildFilterChips() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -141,7 +137,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  // Widget untuk menampilkan item riwayat
   Widget _buildHistoryItem(Payment payment) {
     final currencyFormat = NumberFormat.currency(
       locale: 'id_ID',
