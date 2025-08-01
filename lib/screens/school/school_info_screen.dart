@@ -178,7 +178,7 @@ class SchoolInfoScreen extends StatelessWidget {
 
   void _callSchool() async {
     // Nomor telepon tujuan
-    final Uri phoneLaunchUri = Uri(scheme: 'tel', path: '+6281234567890');
+    final Uri phoneLaunchUri = Uri(scheme: 'tel', path: '+6287881343541');
 
     try {
       if (await canLaunchUrl(phoneLaunchUri)) {
