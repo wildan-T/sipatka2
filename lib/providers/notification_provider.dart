@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sipatka/main.dart';
 import 'package:sipatka/providers/auth_provider.dart';
 
@@ -10,56 +11,208 @@ class NotificationProvider with ChangeNotifier {
   StreamSubscription<dynamic>? _paymentSubscription;
   StreamSubscription<dynamic>? _chatSubscription;
 
+  bool _hasNewPayment = false;
+  final Map<String, bool> _unreadMessages = {};
+  bool _hasPaymentStatusUpdate = false;
+  bool _hasNewAdminMessage = false;
+
+  // Tambahkan variabel untuk menyimpan timestamp terakhir
   DateTime? _lastPaymentCheck;
   DateTime? _lastMessageCheck;
   DateTime? _lastPaymentUpdateCheck;
   DateTime? _lastAdminMessageCheck;
 
-  bool _hasNewPayment = false;
-  final Map<String, bool> _unreadMessages = {};
-
   bool get hasNewPayment => _hasNewPayment;
   bool hasUnreadMessagesFrom(String userId) => _unreadMessages[userId] ?? false;
   bool get hasAnyUnreadMessages => _unreadMessages.containsValue(true);
-
-  bool _hasPaymentStatusUpdate = false;
-  bool _hasNewAdminMessage = false;
-
   bool get hasPaymentStatusUpdate => _hasPaymentStatusUpdate;
   bool get hasNewAdminMessage => _hasNewAdminMessage;
 
   NotificationProvider(this.authProvider) {
     authProvider.addListener(_onAuthStateChanged);
-    _setupListeners();
+    _onAuthStateChanged();
+  }
+
+  @override
+  void dispose() {
+    authProvider.removeListener(_onAuthStateChanged);
+    _paymentSubscription?.cancel();
+    _chatSubscription?.cancel();
+    super.dispose();
   }
 
   void _onAuthStateChanged() {
     _setupListeners();
   }
 
-  void _setupListeners() {
-    dispose();
-    if (authProvider.isLoggedIn) {
-      if (authProvider.userRole == 'admin') {
-        _listenForNewPayments();
-        _listenForNewMessagesForAdmin();
-      } else {
-        _listenForPaymentUpdatesForUser();
-        _listenForNewMessagesForUser();
+  Future<void> _setupListeners() async {
+    _paymentSubscription?.cancel();
+    _chatSubscription?.cancel();
+
+    if (!authProvider.isLoggedIn) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final userId = authProvider.userModel?.uid ?? 'unknown';
+
+    if (authProvider.userRole == 'admin') {
+      // Setup untuk admin
+      final paymentKey = 'lastPaymentCheck';
+      var lastCheckMillis = prefs.getInt(paymentKey);
+      if (lastCheckMillis == null) {
+        lastCheckMillis = DateTime.now().toUtc().millisecondsSinceEpoch;
+        await prefs.setInt(paymentKey, lastCheckMillis);
       }
+      _lastPaymentCheck = DateTime.fromMillisecondsSinceEpoch(lastCheckMillis);
+      _listenForNewPayments(_lastPaymentCheck!);
+
+      final messageKey = 'lastMessageCheck';
+      var lastMsgCheckMillis = prefs.getInt(messageKey);
+      if (lastMsgCheckMillis == null) {
+        lastMsgCheckMillis = DateTime.now().toUtc().millisecondsSinceEpoch;
+        await prefs.setInt(messageKey, lastMsgCheckMillis);
+      }
+      _lastMessageCheck = DateTime.fromMillisecondsSinceEpoch(
+        lastMsgCheckMillis,
+      );
+      _listenForNewMessagesForAdmin(_lastMessageCheck!);
+    } else {
+      // Setup untuk user
+      final paymentUpdateKey = 'lastPaymentUpdateCheck_$userId';
+      var lastUpdateCheckMillis = prefs.getInt(paymentUpdateKey);
+      if (lastUpdateCheckMillis == null) {
+        lastUpdateCheckMillis = DateTime.now().toUtc().millisecondsSinceEpoch;
+        await prefs.setInt(paymentUpdateKey, lastUpdateCheckMillis);
+      }
+      _lastPaymentUpdateCheck = DateTime.fromMillisecondsSinceEpoch(
+        lastUpdateCheckMillis,
+      );
+      _listenForPaymentUpdatesForUser(_lastPaymentUpdateCheck!);
+
+      final adminMessageKey = 'lastAdminMessageCheck_$userId';
+      var lastAdminMsgCheckMillis = prefs.getInt(adminMessageKey);
+      if (lastAdminMsgCheckMillis == null) {
+        lastAdminMsgCheckMillis = DateTime.now().toUtc().millisecondsSinceEpoch;
+        await prefs.setInt(adminMessageKey, lastAdminMsgCheckMillis);
+      }
+      _lastAdminMessageCheck = DateTime.fromMillisecondsSinceEpoch(
+        lastAdminMsgCheckMillis,
+      );
+      _listenForNewMessagesForUser(_lastAdminMessageCheck!);
     }
   }
 
-  void _listenForNewPayments() {
+  // Method untuk refresh timestamp saat app kembali dari background
+  Future<void> refreshTimestamps() async {
+    if (!authProvider.isLoggedIn) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final userId = authProvider.userModel?.uid ?? 'unknown';
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+    if (authProvider.userRole == 'admin') {
+      // Update timestamp untuk admin
+      _lastPaymentCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt('lastPaymentCheck') ?? now,
+      );
+      _lastMessageCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt('lastMessageCheck') ?? now,
+      );
+    } else {
+      // Update timestamp untuk user
+      _lastPaymentUpdateCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt('lastPaymentUpdateCheck_$userId') ?? now,
+      );
+      _lastAdminMessageCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt('lastAdminMessageCheck_$userId') ?? now,
+      );
+    }
+  }
+
+  Future<void> checkForPaymentUpdates() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastCheck = prefs.getInt('lastPaymentCheck') ?? 0;
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+    final response = await supabase
+        .from('payments')
+        .select('updated_at')
+        .order('updated_at', ascending: false)
+        .limit(1);
+
+    if (response != null && response.isNotEmpty) {
+      final updatedAt =
+          DateTime.parse(
+            response.first['updated_at'],
+          ).toUtc().millisecondsSinceEpoch;
+      if (updatedAt > lastCheck) {
+        _hasPaymentStatusUpdate = true;
+        notifyListeners();
+      }
+    }
+
+    await prefs.setInt('lastPaymentCheck', now);
+  }
+
+  Future<void> syncInitialTimestamps() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final userId = authProvider.userModel?.uid ?? 'unknown';
+
+    // Reset semua flag notifikasi saat sync
+    _hasNewPayment = false;
+    _hasPaymentStatusUpdate = false;
+    _hasNewAdminMessage = false;
+    _unreadMessages.clear();
+
+    if (authProvider.userRole == 'admin') {
+      if (!prefs.containsKey('lastPaymentCheck')) {
+        await prefs.setInt('lastPaymentCheck', now);
+      }
+      if (!prefs.containsKey('lastMessageCheck')) {
+        await prefs.setInt('lastMessageCheck', now);
+      }
+      // Update timestamp lokal
+      _lastPaymentCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt('lastPaymentCheck') ?? now,
+      );
+      _lastMessageCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt('lastMessageCheck') ?? now,
+      );
+    } else {
+      final paymentUpdateKey = 'lastPaymentUpdateCheck_$userId';
+      final adminMessageKey = 'lastAdminMessageCheck_$userId';
+
+      if (!prefs.containsKey(paymentUpdateKey)) {
+        await prefs.setInt(paymentUpdateKey, now);
+      }
+      if (!prefs.containsKey(adminMessageKey)) {
+        await prefs.setInt(adminMessageKey, now);
+      }
+      // Update timestamp lokal
+      _lastPaymentUpdateCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt(paymentUpdateKey) ?? now,
+      );
+      _lastAdminMessageCheck = DateTime.fromMillisecondsSinceEpoch(
+        prefs.getInt(adminMessageKey) ?? now,
+      );
+    }
+
+    notifyListeners();
+  }
+
+  void _listenForNewPayments(DateTime lastCheck) {
     _paymentSubscription = supabase
         .from('payments')
         .stream(primaryKey: ['id'])
         .eq('status', 'pending')
         .listen((data) {
-          if (_lastPaymentCheck == null) return;
+          // Gunakan timestamp lokal yang sudah diupdate
+          final currentLastCheck = _lastPaymentCheck ?? lastCheck;
           final hasNew = data.any((item) {
-            final createdAt = DateTime.parse(item['created_at']);
-            return createdAt.isAfter(_lastPaymentCheck!);
+            final updateTimestampStr = item['updated_at'];
+            if (updateTimestampStr == null) return false;
+            final updateTimestamp = DateTime.parse(updateTimestampStr).toUtc();
+            return updateTimestamp.isAfter(currentLastCheck);
           });
           if (hasNew) {
             _hasNewPayment = true;
@@ -68,7 +221,7 @@ class NotificationProvider with ChangeNotifier {
         });
   }
 
-  void _listenForNewMessagesForAdmin() {
+  void _listenForNewMessagesForAdmin(DateTime lastCheck) {
     final adminId = authProvider.userModel?.uid;
     if (adminId == null) return;
 
@@ -76,12 +229,12 @@ class NotificationProvider with ChangeNotifier {
         .from('messages')
         .stream(primaryKey: ['id'])
         .listen((data) {
-          if (_lastMessageCheck == null) return;
+          final currentLastCheck = _lastMessageCheck ?? lastCheck;
           bool changed = false;
           for (var message in data) {
             final senderId = message['sender_id'];
-            final createdAt = DateTime.parse(message['created_at']);
-            if (senderId != adminId && createdAt.isAfter(_lastMessageCheck!)) {
+            final createdAt = DateTime.parse(message['created_at']).toUtc();
+            if (senderId != adminId && createdAt.isAfter(currentLastCheck)) {
               _unreadMessages[senderId] = true;
               changed = true;
             }
@@ -92,7 +245,7 @@ class NotificationProvider with ChangeNotifier {
         });
   }
 
-  Future<void> _listenForPaymentUpdatesForUser() async {
+  Future<void> _listenForPaymentUpdatesForUser(DateTime lastCheck) async {
     final user = authProvider.userModel;
     if (user == null) return;
 
@@ -110,12 +263,13 @@ class NotificationProvider with ChangeNotifier {
         .stream(primaryKey: ['id'])
         .eq('student_id', studentId)
         .listen((data) {
-          if (_lastPaymentUpdateCheck == null) return;
+          final currentLastCheck = _lastPaymentUpdateCheck ?? lastCheck;
           final hasUpdate = data.any((item) {
-            final updatedStr = item['paid_date'] ?? item['updated_at'];
+            final updatedStr = item['updated_at'];
             if (updatedStr == null) return false;
-            final updated = DateTime.parse(updatedStr);
-            return updated.isAfter(_lastPaymentUpdateCheck!);
+            final updated = DateTime.parse(updatedStr).toUtc();
+            return updated.isAfter(currentLastCheck) &&
+                item['status'] != 'pending';
           });
           if (hasUpdate) {
             _hasPaymentStatusUpdate = true;
@@ -124,7 +278,7 @@ class NotificationProvider with ChangeNotifier {
         });
   }
 
-  void _listenForNewMessagesForUser() {
+  void _listenForNewMessagesForUser(DateTime lastCheck) {
     final user = authProvider.userModel;
     if (user == null) return;
 
@@ -133,11 +287,11 @@ class NotificationProvider with ChangeNotifier {
         .stream(primaryKey: ['id'])
         .eq('user_id', user.uid)
         .listen((data) {
-          if (_lastAdminMessageCheck == null) return;
+          final currentLastCheck = _lastAdminMessageCheck ?? lastCheck;
           final hasNewMessage = data.any((message) {
-            final createdAt = DateTime.parse(message['created_at']);
+            final createdAt = DateTime.parse(message['created_at']).toUtc();
             return message['sender_id'] != user.uid &&
-                createdAt.isAfter(_lastAdminMessageCheck!);
+                createdAt.isAfter(currentLastCheck);
           });
           if (hasNewMessage) {
             _hasNewAdminMessage = true;
@@ -146,42 +300,45 @@ class NotificationProvider with ChangeNotifier {
         });
   }
 
-  void clearPaymentNotification() {
+  Future<void> clearPaymentNotification() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await prefs.setInt('lastPaymentCheck', now);
+    _lastPaymentCheck = DateTime.fromMillisecondsSinceEpoch(now);
     _hasNewPayment = false;
-    _lastPaymentCheck = DateTime.now();
     notifyListeners();
   }
 
-  void clearMessageNotificationFor(String userId) {
+  Future<void> clearMessageNotificationFor(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await prefs.setInt('lastMessageCheck', now);
+    _lastMessageCheck = DateTime.fromMillisecondsSinceEpoch(now);
     if (_unreadMessages.containsKey(userId)) {
       _unreadMessages.remove(userId);
-      _lastMessageCheck = DateTime.now();
       notifyListeners();
     }
   }
 
-  void clearPaymentStatusUpdateNotification() {
+  Future<void> clearPaymentStatusUpdateNotification() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = authProvider.userModel?.uid ?? 'unknown';
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final key = 'lastPaymentUpdateCheck_$userId';
+    await prefs.setInt(key, now);
+    _lastPaymentUpdateCheck = DateTime.fromMillisecondsSinceEpoch(now);
     _hasPaymentStatusUpdate = false;
-    _lastPaymentUpdateCheck = DateTime.now();
     notifyListeners();
   }
 
-  void clearAdminMessageNotification() {
+  Future<void> clearAdminMessageNotification() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = authProvider.userModel?.uid ?? 'unknown';
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final key = 'lastAdminMessageCheck_$userId';
+    await prefs.setInt(key, now);
+    _lastAdminMessageCheck = DateTime.fromMillisecondsSinceEpoch(now);
     _hasNewAdminMessage = false;
-    _lastAdminMessageCheck = DateTime.now();
     notifyListeners();
-  }
-
-  @override
-  // ignore: must_call_super
-  void dispose() {
-    _paymentSubscription?.cancel();
-    _chatSubscription?.cancel();
-  }
-
-  void disposePermanently() {
-    authProvider.removeListener(_onAuthStateChanged);
-    dispose();
-    super.dispose();
   }
 }

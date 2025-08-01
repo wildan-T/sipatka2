@@ -15,22 +15,56 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
   final PageController _pageController = PageController();
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Tambahkan observer untuk lifecycle
+    WidgetsBinding.instance.addObserver(this);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final notifProvider = Provider.of<NotificationProvider>(
+        context,
+        listen: false,
+      );
+      // Sync timestamp saat pertama kali buka app
+      await notifProvider.syncInitialTimestamps();
+      // Fetch payments
       Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
     });
   }
 
   @override
   void dispose() {
+    // Hapus observer saat dispose
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // Ketika app kembali ke foreground dari background
+    if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final notifProvider = Provider.of<NotificationProvider>(
+          context,
+          listen: false,
+        );
+
+        // Refresh timestamp untuk mencegah notifikasi palsu
+        await notifProvider.refreshTimestamps();
+
+        // Sync ulang timestamp untuk memastikan konsistensi
+        await notifProvider.syncInitialTimestamps();
+      });
+    }
   }
 
   @override

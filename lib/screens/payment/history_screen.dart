@@ -20,9 +20,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
   PaymentStatus? _selectedStatus;
 
   @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final notifProvider = Provider.of<NotificationProvider>(
+        context,
+        listen: false,
+      );
+
+      // Tambahkan ini agar timestamp cache diperbarui saat buka app
+      // await notifProvider.syncInitialTimestamps();
+
+      // Clear notifikasi payment status update saat screen dibuka
+      // Setelah timestamp sinkron, bersihkan notifikasi jika ada
+      if (notifProvider.hasPaymentStatusUpdate) {
+        notifProvider.clearPaymentStatusUpdateNotification();
+      }
+    });
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final notifProvider = Provider.of<NotificationProvider>(context);
+    // final notifProvider = Provider.of<NotificationProvider>(context);
 
     if (!_initialized) {
       Future.microtask(() {
@@ -31,12 +52,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
       _initialized = true;
     }
 
-    if (notifProvider.hasPaymentStatusUpdate) {
-      Future.microtask(() {
-        Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
-        notifProvider.clearPaymentStatusUpdateNotification();
-      });
-    }
+    // if (notifProvider.hasPaymentStatusUpdate) {
+    //   Future.microtask(() {
+    //     Provider.of<PaymentProvider>(context, listen: false).fetchPayments();
+    //     notifProvider.clearPaymentStatusUpdateNotification();
+    //   });
+    // }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   @override
